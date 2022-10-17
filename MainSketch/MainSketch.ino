@@ -3,9 +3,29 @@
  Created:	9/8/2022 2:12:38 PM
  Author:	Nabz
 */
-
+//<045108111034115111888012>
 #include <Servo.h>
-#include <Math.h>
+//#include <Math.h>
+
+#include <Arduino.h>
+#include <U8x8lib.h>
+U8X8_SSD1306_128X64_NONAME_HW_I2C u8x8(/* reset=*/ U8X8_PIN_NONE);
+
+
+#pragma region PinDef
+
+#define RELAY_PIN 3
+#define RELAY2_PIN 4
+
+#define BUTTON_PIN 5
+#define BUTTON2_PIN 6
+
+#define SVO_RT_PIN 9 //red
+#define SVO_RB_PIN 10 //brown
+#define SVO_LT_PIN 11 //orange
+#define SVO_LB_PIN 12 //yellow 
+#pragma endregion
+
 Servo myservo_LB; //left bottom
 Servo myservo_LT; //
 
@@ -13,6 +33,29 @@ Servo myservo_RB; //
 Servo myservo_RT; //
 
 Servo ALLSERVOS[4] = { myservo_LB ,myservo_LT, myservo_RB,myservo_RT };
+int Arra_LB_LT_RB_RT[4] = { 60,120,127,65 };
+int CURSTATE_svo_LB_LT_RB_RT[4] = { 60,120,127,65 };
+bool CURSTATE_SOL2_left_On = false;
+bool CURSTATE_SOL5_right_On = false;
+int CURSTATE_Command = 0;
+int CURSTATE_Debug = 0;
+#pragma region DataPars
+
+const byte numChars = 27;
+char receivedChars[numChars];
+boolean newData = false;
+
+char carray0[4] = "xxx";
+char carray1[4] = "xxx";
+char carray2[4] = "xxx";
+char carray3[4] = "xxx";
+char carray4[4] = "xxx";
+char carray5[4] = "xxx";
+char carray6[4] = "xxx";
+char carray7[4] = "xxx";
+char* arrofarra[8] = { carray0,carray1,carray2,carray3,carray4,carray5,carray6,carray7 };
+int RawInts[8] = { 0,0,0,0,0,0,0,0 };
+#pragma endregion
 
 #pragma region  PotRegion
 int potPin_lr = A0;
@@ -55,85 +98,240 @@ int vectorAngle(int x, int y) {
 
 #pragma endregion
 
-
-
-
-
-#pragma region PinDef
-
-#define RELAY_PIN 3
-#define RELAY2_PIN 4
-
-#define BUTTON_PIN 5
-#define BUTTON2_PIN 6
-
-#define SVO_RT_PIN 9 //red
-#define SVO_RB_PIN 10 //brown
-#define SVO_LT_PIN 11 //orange
-#define SVO_LB_PIN 12 //yellow 
-int pos = 0;
-#pragma endregion
-
-
 #pragma region timing
-unsigned long previousMillis = 0;
-// constants won't change:
-const long interval = 1000;
+unsigned long previoustimeInterval_10ms = millis();
+long timeInterval_10ms = 10;
 
-unsigned long previousTimeLed1 = millis();
-long timeIntervalLed1 = 10;
-unsigned long previousTimeSerialPrintPotentiometer = millis();
-long timeIntervalSerialPrint = 50;
+unsigned long previoustimeInterval_15ms = millis();
+long timeInterval_15ms = 15;
+
+//20fps
+unsigned long previoustimeInterval_20ms = millis();
+long timeInterval_20ms = 20;
+
+//30fps
+unsigned long previoustimeInterval_33ms = millis();
+long timeInterval_33ms = 33;
+
 
 #pragma endregion
 
+void TASK1_10ms(long argcurrentTime) {
+	if (argcurrentTime - previoustimeInterval_10ms > timeInterval_10ms) {
+		previoustimeInterval_10ms = argcurrentTime;
+		//DoHAckyTaskImplementation
+	 
 
+		ReceiveWitheReadUnityNewline_andPRocess();
+	
+	}
+}
 
-#pragma region AngleArrays
-//servoL maxLeft 128
+void TASK1_15ms(long argcurrentTime) {
+	if (argcurrentTime - previoustimeInterval_15ms > timeInterval_15ms) {
+		previoustimeInterval_15ms = argcurrentTime;
+		//DoHAckyTaskImplementation
+		for (int s = 0; s < 4; s++) {
+			ALLSERVOS[s].write(CURSTATE_svo_LB_LT_RB_RT[s]);
+		}
 
-//servoR maxRitgh 52
-// 
-//mid  L111 R69
-//N    L94 R86
-//nw  84 113
-//W  L132 R84
-//sw 130 82
-//S  L128 R52
-//se L96 R50
-//E 109 R51
-//ne 96 50
-//              M0   N1    nw2   W3    sw4   S5    se6   E7   ne8
-int araL[] = { 119, 109, 119, 129, 132, 128, 118, 109, 105 };
-int araR[] = { 61,  71,  75,  71,  62,  52,  47,  51,  61 };
-int curDirIndex = 0;
-
-#pragma endregion
-
-
-
-int Arra_LB_LT_RB_RT[4] = { 60,120,127,65 };
-
-
-double  x;
-double  y;
-double midY; //for RightHandServos
-double Dr, Dl;
-double E;
-double  Ar, Al, Br, Bl, Cr, Cl;
-double  Ir, Il, Jr, Jl, Sr, Sl;
-double ANGLE;
-double angRads;
-double radius;
-
-// the setup function runs once when you press reset or power the board
+		digitalWrite(RELAY_PIN, CURSTATE_SOL2_left_On);
+		digitalWrite(RELAY2_PIN, CURSTATE_SOL5_right_On);
 
 
 
+	}
+}
+
+
+
+void recvWithStartEndMarkers() {
+	static boolean recvInProgress = false;
+	static byte ndx = 0;
+	char startMarker = '<';
+	char endMarker = '>';
+	char rc;
+
+	while (Serial.available() > 0 && newData == false) {
+		rc = Serial.read();
+
+		if (recvInProgress == true) {
+			if (rc != endMarker) {
+				receivedChars[ndx] = rc;
+				ndx++;
+				if (ndx >= numChars) {
+					ndx = numChars - 1;
+				}
+			}
+			else {
+				receivedChars[ndx] = '\0'; // terminate the string
+				recvInProgress = false;
+				ndx = 0;
+				newData = true;
+			}
+		}
+
+		else if (rc == startMarker) {
+			recvInProgress = true;
+		}
+	}
+}
+void processRecivedData() {
+	if (newData == true) {
+		//Serial.print("data in buffer ");
+		//Serial.println(receivedChars);
+		int charcount = 0;
+		for (int c = 0; c < numChars; c++) {
+
+			if (receivedChars[c] != NULL) {
+				charcount++;
+			}
+		}
+
+		//poulate local variables
+		for (int arraRow = 0; arraRow < 8; arraRow++) {
+			for (int cindex = 0; cindex < 3; cindex++) {
+				int offset = 3 * arraRow;
+				arrofarra[arraRow][cindex] = receivedChars[offset + cindex];
+			}
+			RawInts[arraRow] = atoi(arrofarra[arraRow]);
+		}
+
+		CURSTATE_svo_LB_LT_RB_RT[0] = RawInts[0];
+		CURSTATE_svo_LB_LT_RB_RT[1] = RawInts[1];
+		if (RawInts[2] > 0) {
+			CURSTATE_SOL2_left_On = true;
+		}
+		else {
+			CURSTATE_SOL2_left_On = false;
+		}
+
+		CURSTATE_svo_LB_LT_RB_RT[2] = RawInts[3];
+		CURSTATE_svo_LB_LT_RB_RT[3] = RawInts[4];
+
+		if (RawInts[5] > 0) {
+			CURSTATE_SOL5_right_On = true;
+		}
+		else {
+			CURSTATE_SOL5_right_On = false;
+		}
+
+		CURSTATE_Command = RawInts[6];
+		CURSTATE_Debug = RawInts[7];
+
+
+		 
+		newData = false;//_______________________________the key to finished datatprocessing
+	}
+}
+ 
+int maxSizeReadBuff = 0;
+int maxSizeReadBuff2 = 0;
+void ReceiveWitheReadUnityNewline_andPRocess() {
+	static byte ndx = 0;
+	String strrc;
+
+	while (Serial.available() > 0) {
+	
+		
+	
+
+	
+
+		strrc = Serial.readStringUntil('\n');
+		int str_len = strrc.length();
+		char str_len_tmp[8];
+		itoa(str_len, str_len_tmp, 10);
+
+		u8x8.drawString(4, 6, str_len_tmp);
+	/*
+		char str_BYTES_tmp[27];
+		strrc = Serial.readBytesUntil('#', str_BYTES_tmp,27);
+		int str_len = strrc.length();
+		char str_len_tmp[8];
+		itoa(str_len, str_len_tmp, 10);
+	*/
+
+	
+
+		//messages from unity with Sendstring() produce 27 bytes
+		//messages from conso,e produce 26
+		if (str_len >= 26) {
+
+			char char_array_Zerothletter[2]; //holeds one char and '\n'
+			strrc.substring(0, 1).toCharArray(char_array_Zerothletter, 2);
+
+			char char_array_26thletter[2]; //holeds one char and '\n'
+			strrc.substring(25, 26).toCharArray(char_array_26thletter, 2);
+
+
+			if (char_array_Zerothletter[0] == '<' && char_array_26thletter[0] == '>') {
+
+				char char_array_24bytes[25];
+				strrc.substring(1, 25).toCharArray(char_array_24bytes, 25);//from char1 to char 24 , but allow 15 bytes for '\n'
+
+				for (int arraRow = 0; arraRow < 8; arraRow++) {
+					for (int cindex = 0; cindex < 3; cindex++) {
+						int offset = 3 * arraRow;
+						arrofarra[arraRow][cindex] = char_array_24bytes[offset + cindex];
+					}
+					RawInts[arraRow] = atoi(arrofarra[arraRow]);
+				}
+
+
+				u8x8.drawString(0, 6, char_array_Zerothletter);
+				u8x8.drawString(2, 6, "s=");
+				/*u8x8.drawString(4, 6, str_len_tmp);*/
+				u8x8.drawString(7, 6, char_array_26thletter);
+
+				
+
+
+				CURSTATE_svo_LB_LT_RB_RT[0] = RawInts[0];
+				CURSTATE_svo_LB_LT_RB_RT[1] = RawInts[1];
+				if (RawInts[2] > 0) {
+					CURSTATE_SOL2_left_On = true;
+				}
+				else {
+					CURSTATE_SOL2_left_On = false;
+				}
+
+				CURSTATE_svo_LB_LT_RB_RT[2] = RawInts[3];
+				CURSTATE_svo_LB_LT_RB_RT[3] = RawInts[4];
+
+				if (RawInts[5] > 0) {
+					CURSTATE_SOL5_right_On = true;
+				}
+				else {
+					CURSTATE_SOL5_right_On = false;
+				}
+
+				CURSTATE_Command = RawInts[6];
+				CURSTATE_Debug = RawInts[7];
+			}
+
+		 
+
+
+		}
+		else
+		{
+			//nothing , just keep old received char
+			 
+				//Serial.read();
+		}
+	}
+}
+
+void setup_uu8x8(void)
+{
+
+	u8x8.begin();
+	u8x8.setPowerSave(0);
+}
 
 void setup() {
 	Serial.begin(115200);
-
 	pinMode(potPin_lr, INPUT);
 	pinMode(potPin_ud, INPUT);
 	pinMode(BUTTON_PIN, INPUT);
@@ -141,7 +339,7 @@ void setup() {
 
 	pinMode(BUTTON2_PIN, INPUT);
 	pinMode(RELAY2_PIN, OUTPUT);
-	curDirIndex = 1;
+	 
 
 	myservo_LB.attach(SVO_LB_PIN);
 	myservo_LT.attach(SVO_LT_PIN);
@@ -149,515 +347,122 @@ void setup() {
 	myservo_RT.attach(SVO_RT_PIN);
 
 
-	//myservo_LB.write(0);
-	//myservo_LT.write(0);
-	//myservo_RB.write(0);
-	//myservo_RT.write(0);
-
-
-
-
-
-	for (int s = 0; s < 4; s++) {
-		ALLSERVOS[s].write(Arra_LB_LT_RB_RT[s]);
-	}
-
-	delay(3000);
-	//                                
-	//       |\ .                        
-	//       | \   \       Br               
-	//       |  \      \                   
-	//       |   \         \                  
-	//       |    \            \                
-	//       |     \              /             
-	//     E |      \ Cr         /                
-	//       |       \          /                 
-	//       |        \        /  Ar                        
-	//       |         \      /                          
-	//       |          \    /                         
-	//       |________Ir_\Jr/ Sr                               
-	//             Dr                       
-	radius = 10;
-	ANGLE = 90;
-	angRads = ANGLE / 360 * 2 * PI;
-
-	x = 0;
-	y = 0;
-
-	x = cos(angRads) * radius;
-	y = sin(angRads) * radius;
-	Serial.println("x= " + String(x, 6) + "  y=" + String(y, 6));
-
-
-	midY = 50; //for RightHandServos
-	Dr = 19.5 - x;
-	Dl = 19.5 + x;
-	E = midY + y;
-	Ar = 32;
-	Al = 32;
-	Br = 48;
-	Bl = 48;
-	Cr = sqrt((E * E) + (Dr * Dr));
-	Cl = sqrt((E * E) + (Dl * Dl));
-
-	Serial.println("Cr= " + String(Cr, 6) + "  Cl=" + String(Cl, 6));
-
-
-	Ir = acos(Dr / Cr) / 2 / PI * 360;
-	Il = acos(Dl / Cl) / 2 / PI * 360;
-	Serial.println("Ir= " + String(Ir, 6) + "  Il=" + String(Il, 6));
-
-	Jr = acos(((Cr * Cr) + (Ar * Ar) - (Br * Br)) / (2 * Ar * Cr)) / 2 / PI * 360;
-	Jl = acos(((Cl * Cl) + (Al * Al) - (Bl * Bl)) / (2 * Al * Cl)) / 2 / PI * 360;
-	Serial.println("Jr= " + String(Jr, 6) + "  Jl=" + String(Jl, 6));
-
-	Sr = 180 - Ir - Jr;
-	Sl = Il + Jl;
-
-	Serial.println("Sr= " + String(Sr, 6) + "  Sl=" + String(Sl, 6));
-
-}
-
-void populateServoangs(double argAng, double argRadius) {
-	radius = argRadius;
-	ANGLE = argAng;
-	angRads = ANGLE / 360 * 2 * PI;
-
-	x = 0;
-	y = 0;
-
-	x = cos(angRads) * radius;
-	y = sin(angRads) * radius;
-
-	midY = 50; //for RightHandServos
-	Dr = 19.5 + x;
-	Dl = 19.5 - x;
-	E = midY + y;
-	Ar = 32;
-	Al = 32;
-	Br = 48;
-	Bl = 48;
-	Cr = sqrt((E * E) + (Dr * Dr));
-	Cl = sqrt((E * E) + (Dl * Dl));
-
-
-
-
-	Ir = acos(Dr / Cr) / 2 / PI * 360;
-	Il = acos(Dl / Cl) / 2 / PI * 360;
-
-	Jr = acos(((Cr * Cr) + (Ar * Ar) - (Br * Br)) / (2 * Ar * Cr)) / 2 / PI * 360;
-	Jl = acos(((Cl * Cl) + (Al * Al) - (Bl * Bl)) / (2 * Al * Cl)) / 2 / PI * 360;
-
-	Sr = 180 - Ir - Jr;
-	Sl = Il + Jl;
-
-	Arra_LB_LT_RB_RT[2] = int(Sl);
-	Arra_LB_LT_RB_RT[3] = int(Sr);
-
-
-
-	//***********************************
-
-
-
-
-	radius = argRadius;
-	ANGLE = 360 - argAng;
-	angRads = ANGLE / 360 * 2 * PI;
-
-	x = 0;
-	y = 0;
-
-	x = cos(angRads) * radius;
-	y = sin(angRads) * radius;
-
-	midY = 60; //for RightHandServos
-	Dr = 19.5 - x;
-	Dl = 19.5 + x;
-	E = midY + y;
-	Ar = 32;
-	Al = 32;
-	Br = 48;
-	Bl = 48;
-	Cr = sqrt((E * E) + (Dr * Dr));
-	Cl = sqrt((E * E) + (Dl * Dl));
-
-
-
-
-	Ir = acos(Dr / Cr) / 2 / PI * 360;
-	Il = acos(Dl / Cl) / 2 / PI * 360;
-
-	Jr = acos(((Cr * Cr) + (Ar * Ar) - (Br * Br)) / (2 * Ar * Cr)) / 2 / PI * 360;
-	Jl = acos(((Cl * Cl) + (Al * Al) - (Bl * Bl)) / (2 * Al * Cl)) / 2 / PI * 360;
-
-	Sr = 180 - Ir - Jr;
-	Sl = Il + Jl;
-
-	Arra_LB_LT_RB_RT[0] = int(Sr);
-	Arra_LB_LT_RB_RT[1] = int(Sl);
-
-}
-
-#pragma region PotReading
-
-void ReadPots() {
-	ValPot_lr = analogRead(potPin_lr);
-	ValPot_ud = analogRead(potPin_ud);
-
-	if (ValPot_lr > (midPot_lr - deadzone) && ValPot_lr < (midPot_lr + deadzone)) { ValPot_lr = 500; DeadzoneLR = true; }
-	else
-	{
-		DeadzoneLR = false;
-	}
-	if (ValPot_ud > (midPot_ud - deadzone) && ValPot_ud < (midPot_ud + deadzone)) { ValPot_ud = 500; DeadzoneUD = true; }
-	else
-	{
-		DeadzoneUD = false;
-	}
-
-	ScaledPot_lr = map(ValPot_lr, 0, 1023, 0, 512);
-
-	ScaledPot_ud = map(ValPot_ud, 0, 1023, 512, 0);
-
-	if (ScaledPot_lr > 240 && ScaledPot_lr < 247)XaxisValue = 0;
-	else
-		if (ScaledPot_lr <= 240) XaxisValue = -240 + ScaledPot_lr;
-		else
-			if (ScaledPot_lr >= 247) XaxisValue = -247 + ScaledPot_lr;
-
-
-	if (ScaledPot_ud > 240 && ScaledPot_ud < 270)YaxisValue = 0;
-	else
-		if (ScaledPot_ud <= 240) YaxisValue = -240 + ScaledPot_ud;
-		else
-			if (ScaledPot_ud >= 270) YaxisValue = -270 + ScaledPot_ud;
-}
-
-#pragma endregion
-
-
-int angcnt = 0;
-
-String readString, servo1, servo2, servo3, servo4;
-void testread4() {
-	while (Serial.available()) {
-		delay(10);
-		if (Serial.available() > 0) {
-			char c = Serial.read();  //gets one byte from serial buffer
-			readString += c; //makes the string readString
-		}
-	}
-
-	if (readString.length() > 0) {
-		Serial.println(readString); //see what was received
-
-		// expect a string like 07002100 containing the two servo positions      
-		servo1 = readString.substring(0, 3); //get the first four characters
-		servo2 = readString.substring(3, 6); //get the next four characters 
-		servo3 = readString.substring(6, 9);
-		servo4 = readString.substring(9, 12);
-
-		//Serial.println(servo1);  //print ot serial monitor to see results
-		//Serial.println(servo2);
-		//Serial.println(servo3);  //print ot serial monitor to see results
-		//Serial.println(servo4);
-		int n1; //declare as number  
-		int n2;
-		int n3;
-		int n4;
-
-		char carray1[6]; //magic needed to convert string to a number 
-		servo1.toCharArray(carray1, sizeof(carray1));
-		n1 = atoi(carray1);
-
-		char carray2[6];
-		servo2.toCharArray(carray2, sizeof(carray2));
-		n2 = atoi(carray2);
-
-		char carray3[6];
-		servo3.toCharArray(carray3, sizeof(carray3));
-		n3 = atoi(carray3);
-
-		char carray4[6];
-		servo4.toCharArray(carray4, sizeof(carray4));
-		n4 = atoi(carray4);
-
-		// myservo1.writeMicroseconds(n1); //set servo position 
-		// myservo2.writeMicroseconds(n2);
-
-
-		Serial.println(n1);  //print ot serial monitor to see results
-		Serial.println(n2);
-		Serial.println(n3);  //print ot serial monitor to see results
-		Serial.println(n4);
-		readString = "";
-	}
-}
-
-
-String commmand, Dir1, Dir2, flag;
-void test() {
-	while (Serial.available()) {
-		delay(10);
-		if (Serial.available() > 0) {
-			char c = Serial.read();  //gets one byte from serial buffer
-			readString += c; //makes the string readString
-		}
-	}
-
-	if (readString.length() > 0) {
-		Serial.println(readString); //see what was received
-
-		// expect a string like 07002100 containing the two servo positions      
-		Dir1 = readString.substring(0, 3); //get the first four characters
-		Dir2 = readString.substring(3, 6); //get the next four characters 
-		commmand = readString.substring(6, 9);
-		flag = readString.substring(9, 12);
-
-		//Serial.println(servo1);  //print ot serial monitor to see results
-		//Serial.println(servo2);
-		//Serial.println(servo3);  //print ot serial monitor to see results
-		//Serial.println(servo4);
-		int n1; //declare as number  
-		int n2;
-		int n3;
-		int n4;
-
-		char carray1[6]; //magic needed to convert string to a number 
-		servo1.toCharArray(carray1, sizeof(carray1));
-		n1 = atoi(carray1);
-
-		char carray2[6];
-		servo2.toCharArray(carray2, sizeof(carray2));
-		n2 = atoi(carray2);
-
-		char carray3[6];
-		servo3.toCharArray(carray3, sizeof(carray3));
-		n3 = atoi(carray3);
-
-		char carray4[6];
-		servo4.toCharArray(carray4, sizeof(carray4));
-		n4 = atoi(carray4);
-
-		// myservo1.writeMicroseconds(n1); //set servo position 
-		// myservo2.writeMicroseconds(n2);
-
-
-		Serial.println(n1);  //print ot serial monitor to see results
-		Serial.println(n2);
-		Serial.println(n3);  //print ot serial monitor to see results
-		Serial.println(n4);
-		readString = "";
-	}
-}
-// the loop function runs over and over again until power down or reset
-void loop() {
+	setup_uu8x8();
+	u8x8.setFont(u8x8_font_chroma48medium8_r);
+	u8x8.drawString(3, 2, "starting");
+	//delay(400);
 	
-	return;
-	// test();
-	 /*
-	  myservo_LB.write(pos);
-	  myservo_LT.write(pos);
-	  myservo_RB.write(pos);
-	  myservo_RT.write(pos);
-	  */
-	unsigned long currentTime = millis();
 
-	if (currentTime % 15 == 0) {
-		angcnt++;
-		if (angcnt >= 360)angcnt = 0;
-
-		populateServoangs(angcnt, 10);
-	}
-
-
-
-	for (int s = 0; s < 4; s++) {
-		ALLSERVOS[s].write(Arra_LB_LT_RB_RT[s]);
-	}
-
-	////task1 run servos
-	//TASK1(currentTime);
-
-	////task2 serial read
-	//TASK2();
-
-	////task3 read buttons
-	TASK3();
-
-	////task4 read pots
-	//TASK4();
-
-	////task5 writ console
-	//TASK5(currentTime);
-}
-
-int cnt = 0;
-void RunServoEveryXframe(int argXframe, Servo argServoBot, Servo argServoTop) {
-	cnt++;
-	if (cnt >= 100009)cnt = 0;
-	if (cnt % argXframe == 0) {
-		argServoBot.write(araL[curDirIndex]);
-		argServoTop.write(araR[curDirIndex]);
-	}
-
-}
-
-
-int GetDirectionFromAngle(int argAngle) {
-
-	int dirIndex_fromAngle = 0;
-
-	//              M0   N1    nw2   W3    sw4   S5    se6   E7   ne8
-	// mid
-	//if (argAngle ==0 || argAngle == 360) {
-	//    dirIndex_fromAngle = 0;
+	//for (int s = 0; s < 4; s++) {
+	//	ALLSERVOS[s].write(0);
 	//}
 
-	if (DeadzoneLR && DeadzoneUD) {
-		dirIndex_fromAngle = 0;
-		return dirIndex_fromAngle;
+//	delay(1000);
+
+
+	//for (int s = 0; s < 4; s++) {
+	//	ALLSERVOS[s].write(90);
+	//}
+//	delay(1000);
+
+
+	for (int s = 0; s < 4; s++) {
+		ALLSERVOS[s].write(Arra_LB_LT_RB_RT[s]);
 	}
 
-	// E7
-	if (argAngle >= 0 && argAngle <= 22) {
-
-		if (DeadzoneLR && DeadzoneUD) {
-			dirIndex_fromAngle = 0;
-
-		}
-		else
-
-
-			dirIndex_fromAngle = 7;
-	}
-	else
-		if (argAngle > 337 && argAngle <= 360) {
-			dirIndex_fromAngle = 7;
-		}
-		else
-			// ne8
-			if (argAngle > 22 && argAngle <= 67) {
-				dirIndex_fromAngle = 8;
-			}
-			else
-				// N1
-				if (argAngle > 67 && argAngle <= 112) {
-					dirIndex_fromAngle = 1;
-				}
-				else
-					// nw2
-					if (argAngle > 112 && argAngle <= 157) {
-						dirIndex_fromAngle = 2;
-					}
-					else
-						// W3
-						if (argAngle > 157 && argAngle <= 202) {
-							dirIndex_fromAngle = 3;
-						}
-						else
-							// sw4
-							if (argAngle > 202 && argAngle <= 247) {
-								dirIndex_fromAngle = 4;
-							}
-							else
-								// S5
-								if (argAngle > 247 && argAngle <= 292) {
-									dirIndex_fromAngle = 5;
-								}
-								else
-									// se6
-									if (argAngle > 292 && argAngle <= 337) {
-										dirIndex_fromAngle = 6;
-									}
-
-
-
-	return dirIndex_fromAngle;
-}
-void servoSweeptest(Servo argservo) {
-	for (pos = 0; pos <= 180; pos += 1) { // goes from 0 degrees to 180 degrees
-   // in steps of 1 degree
-		argservo.write(pos);              // tell servo to go to position in variable 'pos'
-		delay(15);                       // waits 15ms for the servo to reach the position
-	}
-	for (pos = 180; pos >= 0; pos -= 1) { // goes from 180 degrees to 0 degrees
-		argservo.write(pos);              // tell servo to go to position in variable 'pos'
-		delay(15);                       // waits 15ms for the servo to reach the position
-	}
+	delay(500);
+	u8x8.clearDisplay();
 }
 
 
-void TASK1(long argcurrentTime) {
-	// task 1
-	if (argcurrentTime - previousTimeLed1 > timeIntervalLed1) {
-		previousTimeLed1 = argcurrentTime;
-		curDirIndex = PotToDir;
-		RunServoEveryXframe(1, myservo_LB, myservo_LT);
-		RunServoEveryXframe(1, myservo_RB, myservo_RT);
-	}
+void loop() {
+
+	unsigned long currentTime = millis();
+ 
+
+
+	 
+	//recvWithStartEndMarkers();
+	//processRecivedData();
+	 //ReceiveWitheReadUnityNewline_andPRocess();
+
+	TASK1_10ms(currentTime);
+	TASK1_15ms(currentTime);
+
+	u8x8.drawString(0, 0, arrofarra[0]); u8x8.drawString(4, 0, arrofarra[1]);  u8x8.drawString(8, 0, arrofarra[3]); 	u8x8.drawString(12, 0, arrofarra[4]);
+	u8x8.drawString(0, 1, arrofarra[2]);									   u8x8.drawString(8, 1, arrofarra[5]);
+
+	u8x8.drawString(0, 3, arrofarra[6]); u8x8.drawString(4, 3, arrofarra[7]);
+
+
+
+
+
+
+ 
+
+
+
+
+	 u8x8.refreshDisplay();
 }
+void testloop() {
 
-void TASK2() {
-	// task 2
-	if (Serial.available()) {
-		int userInput = Serial.parseInt();
-		if (userInput >= 0 && userInput < 10) {
-			curDirIndex = userInput;
-		}
+	unsigned long currentTime = millis();
+	int ReadBufferSize = Serial.available();
+	char readBuff_len__tmp[32];
+	itoa(ReadBufferSize, readBuff_len__tmp, 10);
+	u8x8.drawString(0, 6, "b=");
+	u8x8.drawString(2, 6, readBuff_len__tmp);
+
+	if (ReadBufferSize > maxSizeReadBuff) {
+		maxSizeReadBuff = ReadBufferSize;
 	}
+	char readBuff_Maxlen__tmp[32];
+	itoa(maxSizeReadBuff, readBuff_Maxlen__tmp, 10);
+	u8x8.drawString(6, 6, "mx");
+	u8x8.drawString(8, 6, readBuff_Maxlen__tmp);
 
-}
-void TASK3() {
-	// task 3
-	if (digitalRead(BUTTON_PIN) == HIGH) {
-		digitalWrite(RELAY_PIN, HIGH);
+
+	//ReceiveWitheReadUnityNewline_andPRocess();
+	//recvWithStartEndMarkers();
+	//processRecivedData();
+	//ReceiveWitheReadUnityNewline_andPRocess();
+
+	//TASK1_10ms(currentTime);
+	//TASK1_15ms(currentTime);
+
+	//u8x8.drawString(0, 0, arrofarra[0]); u8x8.drawString(4, 0, arrofarra[1]);  u8x8.drawString(8, 0, arrofarra[3]); 	u8x8.drawString(12, 0, arrofarra[4]);
+	//u8x8.drawString(0, 1, arrofarra[2]);									   u8x8.drawString(8, 1, arrofarra[5]);
+
+	//u8x8.drawString(0, 3, arrofarra[6]); u8x8.drawString(4, 3, arrofarra[7]);
+
+
+
+
+
+
+
+	
+
+
+
+	int ReadBufferSize2 = Serial.available();
+	char readBuff_len__tmp2[32];
+	itoa(ReadBufferSize2, readBuff_len__tmp2, 10);
+	u8x8.drawString(0, 7, "b=");
+	u8x8.drawString(2, 7, readBuff_len__tmp2);
+
+	if (ReadBufferSize2 > maxSizeReadBuff2) {
+		maxSizeReadBuff2 = ReadBufferSize2;
 	}
-	else {
-		digitalWrite(RELAY_PIN, LOW);
-	}
-
-	if (digitalRead(BUTTON2_PIN) == HIGH) {
-		digitalWrite(RELAY2_PIN, HIGH);
-	}
-	else {
-		digitalWrite(RELAY2_PIN, LOW);
-	}
-
-}
-void TASK4() {
-	// task 4
-	ReadPots();
-	//gets ScaledPot_lr and ScaledPot_ud  and gets clean XaxisValue and YaxisValue
-	myangle = vectorAngle(XaxisValue, YaxisValue);
-	PotToDir = GetDirectionFromAngle(myangle);
-}
-void TASK5(long argcurrentTime) {
-	// task 5
-	if (argcurrentTime - previousTimeSerialPrintPotentiometer > timeIntervalSerialPrint) {
-		previousTimeSerialPrintPotentiometer = argcurrentTime;
-
-		Serial.print("myangle: ");
-		Serial.print(myangle);
-
-		Serial.print(" lr: ");
-		Serial.print(ValPot_lr);
-		Serial.print(" ud : ");
-		Serial.print(ValPot_ud);
-		Serial.print(" X : ");
-		Serial.print(XaxisValue);
-		Serial.print(" Y : ");
-		Serial.print(YaxisValue);
+	char readBuff_Maxlen__tmp2[32];
+	itoa(maxSizeReadBuff2, readBuff_Maxlen__tmp2, 10);
+	u8x8.drawString(6, 7, "mx");
+	u8x8.drawString(8, 7, readBuff_Maxlen__tmp2);
 
 
 
-		Serial.print("   dir ");
-		Serial.println(PotToDir);
-		//Serial.print("Value lr: " );
-		//Serial.print(ScaledPot_lr);
-		//Serial.print(" :ud  ");
-		//Serial.println(ScaledPot_ud);
-	}
+
+	//u8x8.refreshDisplay();
 }

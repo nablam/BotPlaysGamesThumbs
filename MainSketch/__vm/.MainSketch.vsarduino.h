@@ -90,5 +90,7 @@ typedef void *__builtin_va_list;
 #define pgm_read_ptr(address_short)   short()
 
 #include "MainSketch.ino"
+#include "DisplayUU8x8.ino"
+#include "OldKinematicsCalculations.ino"
 #endif
 #endif
